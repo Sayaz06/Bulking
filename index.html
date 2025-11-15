@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulking Meal Plan (PWA)</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff9800">
+
+<style>
+body { font-family: Arial; margin: 20px; background: #f9f9f9; }
+h1,h2 { margin: 10px 0; }
+.section { background: #fff; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 0 5px #ccc; }
+.itemBox { background: #f0f0f0; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+.row { display: flex; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; align-items:center; }
+input[type="text"], input[type="number"], textarea { padding: 5px; font-size: 14px; flex: 1; min-width:120px; }
+textarea { min-height:60px; flex-basis:100%; }
+button { padding: 5px 10px; border-radius:5px; background:#ff9800; color:white; border:none; cursor:pointer; }
+button.delete { background:red; }
+.warning { color:red; font-weight:bold; margin-top:5px; }
+#jsonButtons { margin-bottom:20px; }
+</style>
+</head>
+<body>
+
+<h1>Bulking Meal Plan</h1>
+
+<div id="jsonButtons">
+    <button onclick="exportJSON()">💾 Export JSON</button>
+    <input type="file" id="importFile" style="display:none" onchange="importJSON(event)">
+    <button onclick="document.getElementById('importFile').click()">📂 Import JSON</button>
+</div>
+
+<div id="mealSections" class="section"></div>
+
+<script>
+// ===== DATA =====
+let data = JSON.parse(localStorage.getItem("bulkingApp")) || {
+    meals: { pagi: [], tengah: [], petang: [], malam: [], snack: [] }
+};
+
+// ===== SAVE =====
+function save(){ localStorage.setItem("bulkingApp", JSON.stringify(data)); }
+
+// ===== IMPORT / EXPORT =====
+function exportJSON(){
+    const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download="bulking_mealplan.json"; a.click();
+    URL.revokeObjectURL(url);
+}
+function importJSON(event){
+    const file = event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e=>{
+        try{
+            const imported = JSON.parse(e.target.result);
+            data = imported;
+            save();
+            renderMeals();
+            alert("Import berjaya!");
+        }catch(err){ alert("Fail JSON tidak sah!"); }
+    };
+    reader.readAsText(file);
+    event.target.value="";
+}
+
+// ===== RENDER MEALS =====
+function renderMeals(){
+    const sections = { pagi:"Pagi", tengah:"Tengah Hari", petang:"Petang", malam:"Malam", snack:"Snack" };
+    const container = document.getElementById("mealSections");
+    container.innerHTML="";
+    for(let key in sections){
+        const secDiv = document.createElement("div"); secDiv.className="section";
+        const h2 = document.createElement("h2"); h2.textContent="Meal "+sections[key]; secDiv.appendChild(h2);
+        const listDiv = document.createElement("div"); listDiv.id=key+"List"; secDiv.appendChild(listDiv);
+        const addBtn = document.createElement("button"); addBtn.textContent="+ Tambah Meal"; addBtn.onclick=()=>{ addMeal(key); };
+        secDiv.appendChild(addBtn);
+        container.appendChild(secDiv);
+
+        const list = document.getElementById(key+"List");
+        list.innerHTML="";
+        data.meals[key].forEach((item,i)=>{
+            const div = document.createElement("div"); div.className="itemBox";
+            const row1 = document.createElement("div"); row1.className="row";
+
+            const inpName = document.createElement("input"); inpName.type='text'; inpName.placeholder='Nama Makanan / Meal'; inpName.value=item.nama||''; inpName.oninput=e=>{ item.nama=e.target.value; save(); };
+            const inpPortion = document.createElement("input"); inpPortion.type='text'; inpPortion.placeholder='Portion / gram / biji'; inpPortion.value=item.portion||''; inpPortion.oninput=e=>{ item.portion=e.target.value; save(); };
+            row1.append(inpName,inpPortion);
+
+            const row2 = document.createElement("div"); row2.className="row";
+            const txtNote = document.createElement("textarea"); txtNote.placeholder='Nota / Kelebihan / Info'; txtNote.value=item.note||''; txtNote.oninput=e=>{ item.note=e.target.value; save(); };
+            row2.appendChild(txtNote);
+
+            const row3 = document.createElement("div"); row3.className="row";
+            const chkDone = document.createElement("input"); chkDone.type='checkbox'; chkDone.checked=item.done||false; chkDone.onchange=e=>{ item.done=e.target.checked; save(); renderMeals(); };
+            const labelDone = document.createElement("label"); labelDone.appendChild(chkDone); labelDone.append("Sudah Makan");
+
+            const chkOut = document.createElement("input"); chkOut.type='checkbox'; chkOut.checked=item.outOfStock||false; chkOut.onchange=e=>{ item.outOfStock=e.target.checked; save(); renderMeals(); };
+            const labelOut = document.createElement("label"); labelOut.appendChild(chkOut); labelOut.append("Perlu Beli / Habis");
+
+            const delBtn = document.createElement("button"); delBtn.className='delete'; delBtn.textContent='X'; delBtn.onclick=()=>{ data.meals[key].splice(i,1); save(); renderMeals(); };
+            row3.append(labelDone,labelOut,delBtn);
+
+            div.append(row1,row2,row3);
+
+            if(item.outOfStock){ const warn = document.createElement('div'); warn.className='warning'; warn.textContent="Makanan habis / perlu beli segera!"; div.appendChild(warn); }
+
+            list.appendChild(div);
+        });
+    }
+}
+
+// ===== ADD MEAL =====
+function addMeal(section){ data.meals[section].push({nama:'',portion:'',note:'',done:false,outOfStock:false}); save(); renderMeals(); }
+
+// ===== INIT =====
+renderMeals();
+
+// ===== SERVICE WORKER =====
+if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').then(()=>console.log("SW registered")).catch(err=>console.log(err));
+}
+</script>
+
+</body>
+</html>
